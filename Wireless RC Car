@@ -1,0 +1,155 @@
+#include <Arduino.h>
+#include "BluetoothSerial.h"
+
+BluetoothSerial SerialBT;
+
+// ===== Motor Pins =====
+const int ENA = 23; const int IN1 = 22; const int IN2 = 21;  // Left motor
+const int ENB = 5;  const int IN3 = 19; const int IN4 = 18;  // Right motor
+
+// ===== PWM Settings =====
+const int PWM_FREQ = 5000;
+const int PWM_RES = 8;
+const int CH_A = 0;
+const int CH_B = 1;
+
+void setup() {
+  Serial.begin(115200);
+  SerialBT.begin("OORJA_CAR");
+  Serial.println("✅ ESP32 Car Ready to Drive");
+
+  // Setup motor pins
+  pinMode(IN1, OUTPUT); pinMode(IN2, OUTPUT);
+  pinMode(IN3, OUTPUT); pinMode(IN4, OUTPUT);
+
+  // Setup PWM
+  ledcSetup(CH_A, PWM_FREQ, PWM_RES); ledcAttachPin(ENA, CH_A);
+  ledcSetup(CH_B, PWM_FREQ, PWM_RES); ledcAttachPin(ENB, CH_B);
+
+  stopCar();
+}
+
+void loop() {
+  if (SerialBT.available()) {
+    String data = SerialBT.readStringUntil('\n');  // Read till newline
+    data.trim();  // Remove extra spaces/newlines
+
+    Serial.print("📲 Received: "); Serial.println(data);
+  
+  if (data.equals("1")) {
+      driftLeft();  // Drift to the left
+    }
+
+    if (data.equals("2")) {
+      driftRight();  // Drift to the left
+    }
+
+    else if (data.length() == 6) {
+      char moveDir = data.charAt(0);                 // F or B
+      int moveSpeed = data.substring(1, 3).toInt();  // 00–99
+
+      char turnDir = data.charAt(3);                 // L or R
+      int turnSpeed = data.substring(4, 6).toInt();  // 00–99
+
+      driveMotors(moveDir, moveSpeed, turnDir, turnSpeed); 
+    }
+  }
+}
+
+// ===== Motor Control =====
+void driveMotors(char moveDir, int moveSpeed, char turnDir, int turnSpeed) {
+  int basePWM = moveSpeed * 3.18;  // 0–255
+  int turnPWM = turnSpeed * 4.25;
+  int leftPWM = 0;
+  int rightPWM = 0;
+
+  // 🌀 SPIN IN PLACE if moveSpeed is 0 and turnSpeed > 0
+  if (moveSpeed == 0 && turnSpeed > 0) {
+    if (turnDir == 'L') {
+      digitalWrite(IN1, LOW); digitalWrite(IN2, HIGH);  // Left backward
+      digitalWrite(IN3, LOW); digitalWrite(IN4, HIGH);  // Right forward
+    } else if (turnDir == 'R') {
+      digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);  // Left forward
+      digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);  // Right backward
+    }
+    ledcWrite(CH_A, turnPWM);
+    ledcWrite(CH_B, turnPWM);
+    return;
+  }
+
+  // 🛣 FORWARD / BACKWARD Setup
+  if (moveDir == 'F') {
+    digitalWrite(IN1, HIGH); digitalWrite(IN2, LOW);   // Left forward
+    digitalWrite(IN3, LOW);  digitalWrite(IN4, HIGH);  // Right forward
+  } else if (moveDir == 'B') {
+    digitalWrite(IN1, LOW);  digitalWrite(IN2, HIGH);  // Left backward
+    digitalWrite(IN3, HIGH); digitalWrite(IN4, LOW);   // Right backward
+  } else {
+    stopCar();
+    return;
+  }
+
+  // 🧠 Adjust PWM based on turn direction
+  leftPWM = basePWM;
+  rightPWM = basePWM;
+
+  if (turnDir == 'L') {
+    leftPWM = basePWM - turnPWM;
+  } else if (turnDir == 'R') {
+    rightPWM = basePWM - turnPWM;
+  }
+
+  // Avoid negative speed
+  leftPWM = constrain(leftPWM, 0, 255);
+  rightPWM = constrain(rightPWM, 0, 255);
+
+  ledcWrite(CH_A, leftPWM);
+  ledcWrite(CH_B, rightPWM);
+
+  Serial.print("🚗 Left PWM: "); Serial.print(leftPWM);
+  Serial.print(" | Right PWM: "); Serial.println(rightPWM);
+}
+
+void stopCar() {
+  digitalWrite(IN1, LOW); digitalWrite(IN2, LOW);
+  digitalWrite(IN3, LOW); digitalWrite(IN4, LOW);
+  ledcWrite(CH_A, 0);
+  ledcWrite(CH_B, 0);
+}
+
+void driftLeft() {
+  int driftPWM = 255;  // Set drift power
+
+  // Left motor backward
+  digitalWrite(IN1, LOW);  digitalWrite(IN2, LOW);
+  // Right motor forward
+  digitalWrite(IN3, LOW);  digitalWrite(IN4, HIGH);
+
+  ledcWrite(CH_A, driftPWM);
+  ledcWrite(CH_B, driftPWM);
+
+  Serial.println("💨 Drifting Left!");
+
+  // Optional: auto stop after a short drift
+  delay(800);
+  stopCar();
+}
+
+
+void driftRight() {
+  int driftPWM = 255;  // Set drift power
+
+  // Left motor backward
+  digitalWrite(IN1, HIGH);  digitalWrite(IN2, LOW);
+  // Right motor forward
+  digitalWrite(IN3, LOW);  digitalWrite(IN4, LOW);
+
+  ledcWrite(CH_A, driftPWM);
+  ledcWrite(CH_B, driftPWM);
+
+  Serial.println("💨 Drifting Left!");
+
+  // Optional: auto stop after a short drift
+  delay(800);
+  stopCar();
+}

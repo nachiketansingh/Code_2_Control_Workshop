@@ -1,0 +1,13 @@
+// Blink an LED
+
+int ledPin1 = 13; //PWM pins
+int ledPin2 = 12; //Non - PWM pins
+void setup() {
+ pinMode(ledPin1, OUTPUT);
+ pinMode(ledPin2, OUTPUT);
+}
+void loop() {
+ digitalWrite(ledPin1, 100); 
+
+ digitalWrite(ledPin2, 100); // it won't glow due to Non - PWM pin
+}
